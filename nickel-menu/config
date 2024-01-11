@@ -1,0 +1,4 @@
+menu_item :reader 	:Dark Mode 	:nickel_setting 	:toggle 	:dark_mode
+menu_item :main 	:Tortuga Sync 	:cmd_output 	:9999:/mnt/onboard/bin/tortuga
+  chain_success 	:nickel_misc 	:rescan_books
+menu_item :main		:Kernel Version :cmd_output     :500:uname -a
