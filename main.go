@@ -81,7 +81,7 @@ func Connect(url string) (Bay, error) {
 
 // metadata returns a map of MD5 hashes as keys and file paths as values.
 func (b Bay) metadata() (map[string]string, error) {
-	meta, err := b.Open(filepath.Join(serverHome, "metadata"))
+	meta, err := b.Open(filepath.Join(serverHome, "metadata.json"))
 	if err != nil {
 		return nil, fmt.Errorf("b.metadata: b.Open: %w", err)
 	}
@@ -125,7 +125,7 @@ func (b Bay) fetch(path string) error {
 		return fmt.Errorf("b.fetch: io.Copy: %w", err)
 	}
 
-	b.cache[hex.EncodeToString(hash.Sum(nil)[:])] = lpath
+	b.cache[hex.EncodeToString(hash.Sum(nil))] = lpath
 	return nil
 }
 
