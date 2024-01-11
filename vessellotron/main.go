@@ -29,7 +29,13 @@ type bot struct {
 	echotron.API
 }
 
+type empty struct{}
+
+func (e empty) Update(_ *echotron.Update) {}
+
 const (
+	NicoNex = 41876271
+
 	intro  = "Ahoy there, me hearty! I be Vessellotron, the swashbucklin’ robot ship who’ll help ye transport yer book barrels to yer Kobo!"
 	noBook = "Arr, there be no barrels to be had, matey!"
 )
@@ -39,6 +45,7 @@ var (
 	token    string
 	home     string
 	metaPath string
+	dsp      *echotron.Dispatcher
 
 	supportedExts = []string{
 		".epub",
@@ -59,6 +66,15 @@ var (
 )
 
 func newBot(chatID int64) echotron.Bot {
+	if chatID != NicoNex {
+		echotron.NewAPI(token).SendMessage("You're not the capitain!", chatID, nil)
+		go func() {
+			time.Sleep(3 * time.Second)
+			dsp.DelSession(chatID)
+		}()
+		return &empty{}
+	}
+
 	return &bot{
 		chatID: chatID,
 		meta:   loadMeta(metaPath),
@@ -154,12 +170,12 @@ func (b *bot) kepubify(fname string, data []byte) error {
 		return fmt.Errorf("b.kepubify: conv.Convert: %w", err)
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("b.kepubify", "f.Seek", err)
+		return fmt.Errorf("b.kepubify: f.Seek: %w", err)
 	}
 
 	hash := md5.New()
 	if _, err := io.Copy(hash, f); err != nil {
-		return fmt.Errorf("b.kepubify", "io.Copy", err)
+		return fmt.Errorf("b.kepubify: io.Copy: %w", err)
 	}
 	b.meta[hex.EncodeToString(hash.Sum(nil))] = fpath
 
@@ -224,18 +240,16 @@ func loadMeta(path string) (m map[string]string) {
 }
 
 func main() {
-	var (
-		dsp  = echotron.NewDispatcher(token, newBot)
-		opts = echotron.UpdateOptions{
-			Timeout: 120,
-			AllowedUpdates: []echotron.UpdateType{
-				echotron.MessageUpdate,
-			},
-		}
-	)
+	opts := echotron.UpdateOptions{
+		Timeout: 120,
+		AllowedUpdates: []echotron.UpdateType{
+			echotron.MessageUpdate,
+		},
+	}
 
+	dsp = echotron.NewDispatcher(token, newBot)
 	for {
-		log.Println(dsp.PollOptions(false, opts))
+		log.Println("dsp.PollOptions", dsp.PollOptions(false, opts))
 		time.Sleep(5 * time.Second)
 	}
 }
