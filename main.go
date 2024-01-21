@@ -30,8 +30,7 @@ var (
 	//go:embed host_key
 	hostKey []byte
 
-	// koboHome   = filepath.Join("/", "mnt", "onboard")
-	koboHome   = filepath.Join("/", "home", "speedking", "tortuga")
+	koboHome   = filepath.Join("/", "mnt", "onboard")
 	serverHome = filepath.Join("/", "home", "tortuga")
 	cachePath  = filepath.Join(koboHome, ".cache", "tortuga-sync")
 )
@@ -143,7 +142,6 @@ func (b Bay) ImportAll() (err error) {
 
 	for _, path := range filter(meta, b.cache) {
 		path := path
-		fmt.Printf("importing %s\n", path)
 		g.Go(func() error { return b.fetch(path) })
 	}
 	if err := g.Wait(); err != nil {
