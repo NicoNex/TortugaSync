@@ -63,6 +63,27 @@ var (
 		".cbz",
 		".cbr",
 	}
+
+	escapeMD = strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"~", "\\~",
+		"`", "\\`",
+		">", "\\>",
+		"#", "\\#",
+		"+", "\\+",
+		"-", "\\-",
+		"=", "\\=",
+		"|", "\\|",
+		"{", "\\{",
+		"}", "\\}",
+		".", "\\.",
+		"!", "\\!",
+	).Replace
 )
 
 func newBot(chatID int64) echotron.Bot {
@@ -88,6 +109,13 @@ func (b *bot) Update(update *echotron.Update) {
 		if _, err := b.SendMessage(intro, b.chatID, nil); err != nil {
 			log.Println("Update", "b.SendMessage", err)
 		}
+
+	case "/refresh":
+		b.refreshMeta()
+		b.sendMeta()
+
+	case "/metadata":
+		b.sendMeta()
 
 	default:
 		if update.Message.Document == nil {
@@ -192,6 +220,54 @@ func (b bot) updateMeta() {
 	}
 }
 
+func (b bot) refreshMeta() {
+	for h, p := range b.meta {
+		sum, err := md5sum(p)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				delete(b.meta, h)
+			} else {
+				log.Println("b.refreshMeta", "md5sum", err)
+			}
+			continue
+		}
+
+		if sum != h {
+			delete(b.meta, h)
+			b.meta[sum] = p
+		}
+	}
+	b.updateMeta()
+}
+
+func (b bot) sendMeta() {
+	var buf strings.Builder
+
+	for h, p := range b.meta {
+		buf.WriteString(fmt.Sprintf("*%s*\n`%s`\n\n", escapeMD(filepath.Base(p)), h))
+	}
+	_, err := b.SendMessage(buf.String(), b.chatID, &echotron.MessageOptions{
+		ParseMode: echotron.MarkdownV2,
+	})
+	if err != nil {
+		log.Println("b.sendMeta", "b.SendMessage", err)
+	}
+}
+
+func md5sum(path string) (string, error) {
+	var hash = md5.New()
+
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := io.Copy(hash, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 func fsFromBytes(fname string, b []byte) (fs.FS, string, error) {
 	tmpf, err := os.CreateTemp("", fname)
 	if err != nil {
@@ -261,4 +337,11 @@ func init() {
 	}
 	home = h
 	metaPath = filepath.Join(home, "metadata.json")
+
+	echotron.NewAPI(token).SetMyCommands(
+		nil,
+		echotron.BotCommand{Command: "/start", Description: "Start the chat with the bot"},
+		echotron.BotCommand{Command: "/refresh", Description: "Refresh books' metadata"},
+		echotron.BotCommand{Command: "/metadata", Description: "Sends the eBooks' metadata"},
+	)
 }
