@@ -104,18 +104,29 @@ func newBot(chatID int64) echotron.Bot {
 }
 
 func (b *bot) Update(update *echotron.Update) {
-	switch msg := update.Message.Text; msg {
-	case "/start":
+	switch msg := update.Message.Text; {
+	case msg == "/start":
 		if _, err := b.SendMessage(intro, b.chatID, nil); err != nil {
 			log.Println("Update", "b.SendMessage", err)
 		}
 
-	case "/refresh":
+	case msg == "/refresh":
 		b.refreshMeta()
 		b.sendMeta()
 
-	case "/metadata":
+	case msg == "/metadata":
 		b.sendMeta()
+
+	case strings.HasPrefix(msg, "/delete"):
+		toks := strings.Split(msg, " ")
+		if len(toks) < 2 {
+			_, err := b.SendMessage("No hash provided", b.chatID, nil)
+			if err != nil {
+				log.Println("b.Update", "b.SendMessage", err)
+			}
+			return
+		}
+		b.delEbook(toks[1])
 
 	default:
 		if update.Message.Document == nil {
@@ -127,6 +138,23 @@ func (b *bot) Update(update *echotron.Update) {
 		}
 		b.saveEbook(update.Message.Document)
 		b.SendMessage("Thanks matey!", b.chatID, nil)
+	}
+}
+
+func (b bot) delEbook(h string) {
+	defer b.updateMeta()
+
+	if p, ok := b.meta[h]; ok {
+		if err := os.Remove(p); err != nil {
+			log.Println("b.Update", "os.Remove", err)
+		}
+		delete(b.meta, h)
+		b.SendMessage("ok", b.chatID, nil)
+	} else {
+		_, err := b.SendMessage("Unknown hash", b.chatID, nil)
+		if err != nil {
+			log.Println("b.Update", "b.SendMessage", err)
+		}
 	}
 }
 
@@ -343,5 +371,6 @@ func init() {
 		echotron.BotCommand{Command: "/start", Description: "Start the chat with the bot"},
 		echotron.BotCommand{Command: "/refresh", Description: "Refresh books' metadata"},
 		echotron.BotCommand{Command: "/metadata", Description: "Sends the eBooks' metadata"},
+		echotron.BotCommand{Command: "/delete", Description: "Deletes an eBook"},
 	)
 }
