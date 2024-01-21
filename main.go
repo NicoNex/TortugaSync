@@ -15,11 +15,14 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/sync/errgroup"
 
 	_ "embed"
 )
 
 var (
+	bay Bay
+
 	//go:embed host_address
 	hostAddress string
 	//go:embed tortuga_key
@@ -27,9 +30,10 @@ var (
 	//go:embed host_key
 	hostKey []byte
 
-	koboHome   = filepath.Join("/", "mnt", "onboard")
-	cachePath  = filepath.Join(koboHome, ".cache", "tortuga-sync")
+	// koboHome   = filepath.Join("/", "mnt", "onboard")
+	koboHome   = filepath.Join("/", "home", "speedking", "tortuga")
 	serverHome = filepath.Join("/", "home", "tortuga")
+	cachePath  = filepath.Join(koboHome, ".cache", "tortuga-sync")
 )
 
 type Bay struct {
@@ -130,15 +134,19 @@ func (b Bay) fetch(path string) error {
 }
 
 func (b Bay) ImportAll() (err error) {
+	var g = new(errgroup.Group)
+
 	meta, err := b.metadata()
 	if err != nil {
 		return err
 	}
 
 	for _, path := range filter(meta, b.cache) {
-		err = errors.Join(err, b.fetch(path))
+		path := path
+		fmt.Printf("importing %s\n", path)
+		g.Go(func() error { return b.fetch(path) })
 	}
-	if err != nil {
+	if err := g.Wait(); err != nil {
 		err = fmt.Errorf("b.ImportAll: %w", err)
 	}
 	return
