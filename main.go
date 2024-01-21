@@ -21,8 +21,6 @@ import (
 )
 
 var (
-	bay Bay
-
 	//go:embed host_address
 	hostAddress string
 	//go:embed tortuga_key
