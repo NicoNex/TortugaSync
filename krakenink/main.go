@@ -29,9 +29,8 @@ type TempData struct {
 
 var (
 	//go:embed template.html
-	tFile embed.FS
-	// dbpath = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
-	dbpath = "/run/media/speedking/KOBOeReader/.kobo/KoboReader.sqlite"
+	tFile  embed.FS
+	dbpath = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
 )
 
 func readBookmarks() (map[string][]Bookmark, error) {
