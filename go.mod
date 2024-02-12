@@ -1,4 +1,4 @@
-module tortuga
+module github.com/NicoNex/tortugasync
 
 go 1.22.0
 
