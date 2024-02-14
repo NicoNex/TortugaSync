@@ -29,8 +29,9 @@ type TempData struct {
 
 var (
 	//go:embed template.html
-	tFile  embed.FS
-	dbpath = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
+	tFile     embed.FS
+	dbpath    = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
+	notespath = filepath.Join("/", "mnt", "onboard", "krakenink")
 )
 
 func readBookmarks() (map[string][]Bookmark, error) {
@@ -65,7 +66,7 @@ func readBookmarks() (map[string][]Bookmark, error) {
 	return data, rows.Err()
 }
 
-func writeHTMLs(data map[string][]Bookmark) {
+func uploadBookmarks(data map[string][]Bookmark) {
 	t, err := template.ParseFS(tFile, "template.html")
 	if err != nil {
 		log.Fatal(err)
@@ -77,7 +78,7 @@ func writeHTMLs(data map[string][]Bookmark) {
 		go func() {
 			defer wg.Done()
 
-			f, err := os.Create(title + ".html")
+			f, err := os.Create(filepath.Join(notespath, title+".html"))
 			if err != nil {
 				log.Println(err)
 				return
@@ -98,5 +99,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	writeHTMLs(data)
+
+	uploadBookmarks(data)
 }

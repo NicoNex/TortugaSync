@@ -83,7 +83,6 @@ func (b Bay) Fetch(localPath, remotePath string) ([]byte, error) {
 	}
 	defer rbook.Close()
 
-	// lpath := filepath.Join(koboHome, filepath.Base(path))
 	lbook, err := os.Create(localPath)
 	if err != nil {
 		return nil, fmt.Errorf("b.fetch: os.Create: %w", err)
@@ -102,6 +101,22 @@ func (b Bay) Fetch(localPath, remotePath string) ([]byte, error) {
 		return nil, fmt.Errorf("b.fetch: io.Copy: %w", err)
 	}
 
-	// b.cache[hex.EncodeToString(hash.Sum(nil))] = localPath
 	return hash.Sum(nil), nil
+}
+
+func (b Bay) Upload(localPath, remotePath string) error {
+	rfile, err := b.OpenFile(remotePath, os.O_CREATE|os.O_RDWR|os.O_TRUNC)
+	if err != nil {
+		return err
+	}
+	defer rfile.Close()
+
+	lfile, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer lfile.Close()
+
+	_, err = io.Copy(rfile, lfile)
+	return err
 }
