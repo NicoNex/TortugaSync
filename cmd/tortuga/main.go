@@ -134,7 +134,8 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 	defer close(done)
 	go func() {
 		for path := range pchan {
-			if err := bay.Upload(path, filepath.Join(serverHome, "bookmarks")); err != nil {
+			rpath := filepath.Join(serverHome, "bookmarks", filepath.Base(path))
+			if err := bay.Upload(path, rpath); err != nil {
 				fmt.Println(err)
 			}
 		}
@@ -165,6 +166,7 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 	wg.Wait()
 	close(pchan)
 	<-done
+	close(done)
 	return
 }
 
