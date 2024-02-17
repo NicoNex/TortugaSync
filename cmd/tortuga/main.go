@@ -163,6 +163,7 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 	wg.Wait()
 	close(pchan)
 	<-done
+	close(done)
 	return
 }
 
