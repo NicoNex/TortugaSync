@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -48,10 +47,8 @@ var (
 
 	koboHome   = filepath.Join("/", "mnt", "onboard")
 	serverHome = filepath.Join("/", "home", "tortuga")
-	// notespath  = filepath.Join("/", "mnt", "onboard", "kraken")
-	// dbpath     = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
-	notespath = "./notes"
-	dbpath    = "/run/media/speedking/KOBOeReader/.kobo/KoboReader.sqlite"
+	notespath  = filepath.Join("/", "mnt", "onboard", "kraken_notes")
+	dbpath     = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
 )
 
 func downloadAll(bay ts.Bay) (e error) {
@@ -113,7 +110,7 @@ func readBookmarks() (map[string][]Bookmark, error) {
 		)
 
 		if err := rows.Scan(&file, &bm.Text, &bm.Note); err != nil {
-			log.Println(err)
+			fmt.Println(err)
 			continue
 		}
 		file = filepath.Base(file)
@@ -134,7 +131,8 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 	defer close(done)
 	go func() {
 		for path := range pchan {
-			if err := bay.Upload(path, filepath.Join(serverHome, "bookmarks")); err != nil {
+			rpath := filepath.Join(serverHome, "bookmarks", filepath.Base(path))
+			if err := bay.Upload(path, rpath); err != nil {
 				fmt.Println(err)
 			}
 		}
@@ -169,7 +167,7 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 }
 
 func main() {
-	flag.BoolVar(&isKraken, "bookmarks", false, "Upload bookmarks to the server")
+	flag.BoolVar(&isKraken, "b", false, "Upload bookmarks to the server")
 	flag.Parse()
 
 	bay, err := ts.Connect(hostAddress, tortugaKey, hostKey)
@@ -195,4 +193,12 @@ func main() {
 		downloadAll(bay)
 	}
 	fmt.Println("All done!")
+}
+
+func init() {
+	if _, err := os.Stat(notespath); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(notespath, 0755); err != nil {
+			fmt.Println(err)
+		}
+	}
 }
