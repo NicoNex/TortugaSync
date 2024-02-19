@@ -11,7 +11,7 @@ import (
 func main() {
 	var port string
 
-	flag.StringVar(&port, "-p", ":8085", "Specify the port to use.")
+	flag.StringVar(&port, "p", ":8085", "Specify the port to use.")
 	flag.Parse()
 
 	home, err := os.UserHomeDir()
