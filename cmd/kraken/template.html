@@ -18,35 +18,50 @@ body {
   background-color: #f5f5f5; /* Preserve light background */
   margin: 20px;
   display: flex;
-  flex-direction: column; /* Stack buttons vertically */
+  flex-direction: column; /* Maintain flexbox for alignment */
+  align-items: center; /* Center items horizontally on all screens */
+  justify-content: flex-start; /* Align top of items on larger screens */
 }
 
 .file-button {
   /* Individual button styling */
   background-color: #ffffff;
   border: none;
-  padding: 10px 20px;
+  padding: 15px 32px; /* Adjust padding for better size on larger screens */
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
   transition: transform 0.3s ease;
   text-decoration: none;
   color: #000000;
   margin: 10px;
-  width: 100%;
 }
 
 .file-button:hover {
   transform: translateY(-3px);
 }
 
-/* Media query for mobile devices (adjust as needed) */
+/* Media queries for responsive adjustments */
 @media only screen and (max-width: 768px) {
   .container {
     margin: 15px;
   }
 
   .file-button {
-    padding: 10px 20px;
+    padding: 10px 15px; /* Adjust padding for smaller screens */
+  }
+}
+
+/* Prevent wrapping on larger screens */
+@media only screen and (min-width: 768px) {
+  .container {
+    flex-wrap: nowrap; /* Disable wrapping */
+  }
+}
+
+@media only screen and (max-width: 576px) {
+  /* More specific adjustments for very small screens */
+  .file-button {
+    font-size: 0.8rem; /* Adjust font size for better readability */
   }
 }
 </style>
