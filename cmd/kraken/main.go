@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"html/template"
 	"log"
@@ -8,12 +9,66 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"embed"
+	"time"
 )
 
-//go:embed template.html
-var templHTML embed.FS
+var (
+	//go:embed template.html
+	templHTML embed.FS
+	//go:embed style.css
+	CSS []byte
+	//go:embed script.js
+	JS []byte
+
+	bpath     string // bookmarks path
+	menuTempl *template.Template
+)
+
+func files(path string) (files []os.DirEntry, err error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			files = append(files, e)
+		}
+	}
+	return
+}
+
+func handleMenu(w http.ResponseWriter, r *http.Request) {
+	files, err := files(bpath)
+	if err != nil {
+		log.Println("handleMenu", "files", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = menuTempl.Execute(w, files)
+	if err != nil {
+		log.Println("handleMenu", "menuTempl.Execute", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleCSS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css")
+	if _, err := w.Write(CSS); err != nil {
+		log.Println("handleCSS", "w.Write", err)
+		return
+	}
+}
+
+func handleJS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	if _, err := w.Write(JS); err != nil {
+		log.Println("handleCSS", "w.Write", err)
+		return
+	}
+}
 
 func main() {
 	var port string
@@ -25,31 +80,26 @@ func main() {
 		port = ":" + port
 	}
 
+	http.HandleFunc("/", handleMenu)
+	http.HandleFunc("/css", handleCSS)
+	http.HandleFunc("/js", handleJS)
+	http.Handle("/file/", http.StripPrefix("/file/", http.FileServer(http.Dir(bpath))))
+
+	for {
+		log.Println("main", "http.ListenAndServe", http.ListenAndServe(port, nil))
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func init() {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("init", "os.UserHomeDir", err)
 	}
+	bpath = filepath.Join(home, ".kraken")
 
-	t, err := template.ParseFS(templHTML, "template.html")
+	menuTempl, err = template.ParseFS(templHTML, "template.html")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("init", "template.ParseFS", err)
 	}
-
-	path := filepath.Join(home, "bookmarks")
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		files, err := os.ReadDir(path)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		if err = t.Execute(w, files); err != nil {
-			log.Println(err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	})
-	http.Handle("/file/", http.StripPrefix("/file/", http.FileServer(http.Dir(path))))
-	log.Println(http.ListenAndServe(port, nil))
 }
