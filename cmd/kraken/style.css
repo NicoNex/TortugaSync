@@ -57,6 +57,10 @@ body {
 	max-width: 100%; /* Take full width of the container */
 	min-width: 250px; /* Ensure a readable minimum width */
 	box-sizing: border-box; /* Include padding in width calculation */
+	cursor: pointer;
+	transition:
+		background-color 0.3s ease,
+		border-color 0.3s ease; /* Smooth transition */
 }
 
 .bookmark-card h2 {
@@ -68,6 +72,60 @@ body {
 	font-style: italic;
 	color: #757575; /* Material You text color */
 	margin-top: 10px;
+}
+
+.bookmark-card:hover {
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+	transform: translateY(-3px);
+	transition:
+		transform 0.3s ease,
+		box-shadow 0.3s ease;
+}
+
+/* Highlighted card */
+.highlight {
+	background-color: #90caf9; /* Light pastel blue */
+	border-color: #64b5f6; /* Slightly darker blue border */
+	transition:
+		background-color 0.5s ease,
+		border-color 0.5s ease; /* Smooth transition */
+}
+
+/* Base Notification styling */
+.notification {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%); /* Center the element */
+	color: white; /* Ensure good contrast with more intense background colors */
+	padding: 10px 20px;
+	border-radius: 5px;
+	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+	font-size: 1rem;
+	z-index: 1000;
+	opacity: 0;
+	transition:
+		opacity 0.5s ease,
+		background-color 0.5s ease; /* Smooth opacity and color transition */
+}
+
+/* Success notification with a softer pastel green */
+.notification.success {
+	background-color: #81c784 !important; /* Pastel Material Green (Green 300) */
+	border-color: #4caf50 !important; /* Darker green for border (Green 500) */
+	color: white; /* Ensure the text is readable */
+}
+
+/* Error notification with more intense red */
+.notification.error {
+	background-color: #e53935 !important; /* Intense Material You Red (Red 600) */
+	border-color: #d32f2f !important; /* Slightly darker red (Red 700) */
+	color: white; /* Ensure the text is readable */
+}
+
+/* When the notification is visible */
+.notification.show {
+	opacity: 1; /* Fade in */
 }
 
 /* Responsive adjustments */
