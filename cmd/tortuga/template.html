@@ -1,71 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{{ .Title }}</title>
-<style>
-body {
-  font-family: sans-serif;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-height: 100vh;
-  background-color: #f5f5f5; /* Light background for contrast */
-}
-
-.container {
-  background-color: #f5f5f5; /* Preserve light background */
-  margin: 20px;
-  display: flex;
-  flex-direction: column; /* Stack cards vertically */
-  /* Removed width setting */
-}
-
-.bookmark-card {
-  /* Individual card styling */
-  background-color: #FFFFFF; /* Light card background */
-  border-radius: 16px; /* Maintain rounded corners */
-  padding: 20px;
-  margin: 10px;
-  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.15), 0 4px 16px 0 rgba(0, 0, 0, 0.12);
-  border: 1px solid #ddd;
-  /* Flexbox for left alignment */
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start; /* Left align content */
-}
-
-.bookmark-card h2 {
-  font-size: 1.5rem;
-  margin-bottom: 10px;
-}
-
-.bookmark-card .note {
-  font-style: italic;
-  color: #757575; /* Material You text color */
-  margin-top: 10px;
-}
-
-/* Media query for mobile devices (adjust as needed) */
-@media only screen and (max-width: 768px) {
-  .container {
-    margin: 15px;
-  }
-}
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>{{ .Title }} Bookmarks</h1>
-  {{ range .Bookmarks }}
-  <div class="bookmark-card">
-    <h2>{{ .Text }}</h2>
-    {{ if .Note }}
-      <p class="note">{{ .Note }}</p>
-    {{ end }}
-  </div>
-  {{ end }}
-</div>
-</body>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>{{ .Title }}</title>
+		<link rel="stylesheet" type="text/css" href="/css" />
+	</head>
+	<body>
+		<div class="container">
+			<h1>{{ .Title }}</h1>
+			{{ range $index, $bookmark := .Bookmarks }}
+			<div
+				class="bookmark-card"
+				id="{{ $index }}"
+				onclick="copyLink('{{ $index }}')"
+			>
+				<h2>{{ $bookmark.Text }}</h2>
+				{{ if $bookmark.Note }}
+				<p class="note">{{ $bookmark.Note }}</p>
+				{{ end }}
+			</div>
+			{{ end }}
+		</div>
+		<script src="/js"></script>
+	</body>
 </html>

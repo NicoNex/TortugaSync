@@ -23,6 +23,13 @@ type Bookmark struct {
 	Note string
 }
 
+type Book struct {
+	ID        string
+	Title     string
+	Author    string
+	Bookmarks []Bookmark
+}
+
 func (b Bookmark) String() string {
 	return fmt.Sprintf("%s\n%s", b.Text, b.Note)
 }
@@ -45,9 +52,10 @@ var (
 	//go:embed template.html
 	tFile embed.FS
 
-	koboHome   = filepath.Join("/", "mnt", "onboard")
 	serverHome = filepath.Join("/", "home", "tortuga")
-	notespath  = filepath.Join("/", "mnt", "onboard", "kraken_notes")
+	bmpath     = filepath.Join(serverHome, ".kraken")
+	koboHome   = filepath.Join("/", "mnt", "onboard")
+	notespath  = filepath.Join("/", "mnt", "onboard", ".kraken_notes")
 	dbpath     = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
 )
 
@@ -88,39 +96,109 @@ func downloadAll(bay ts.Bay) (e error) {
 	return nil
 }
 
-func readBookmarks() (map[string][]Bookmark, error) {
-	var data = make(map[string][]Bookmark)
-
+func readBookmarks() (map[string]*Book, error) {
 	db, err := sql.Open("sqlite", dbpath)
 	if err != nil {
 		return nil, err
 	}
 	defer db.Close()
 
-	rows, err := db.Query(`SELECT VolumeID, Text, Annotation FROM Bookmark`)
+	rows, err := db.Query(
+		`SELECT
+		    Bookmark.VolumeID,
+		    Bookmark.Text,
+		    Bookmark.Annotation,
+		    content.BookTitle,
+			content.Attribution
+		FROM
+		    Bookmark
+		JOIN
+		    content
+		ON
+		    Bookmark.VolumeID = content.BookID;`,
+	)
+
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
+	// var data = make(map[string][]Bookmark)
+	var data = make(map[string]*Book)
 	for rows.Next() {
 		var (
-			file string
-			bm   Bookmark
+			ID     string
+			text   sql.NullString
+			note   sql.NullString
+			title  sql.NullString
+			author sql.NullString
 		)
 
-		if err := rows.Scan(&file, &bm.Text, &bm.Note); err != nil {
+		if err := rows.Scan(&ID, &text, &note, &title, &author); err != nil {
 			fmt.Println(err)
 			continue
 		}
-		file = filepath.Base(file)
-		data[file] = append(data[file], bm)
+
+		if author.Valid {
+			fmt.Println(author.String)
+		}
+		book, ok := data[ID]
+		if !ok {
+			book = &Book{ID: ID, Title: title.String}
+			data[ID] = book
+		}
+		if author.Valid {
+			book.Author = author.String
+		}
+		book.Bookmarks = append(
+			book.Bookmarks,
+			Bookmark{Text: text.String, Note: note.String},
+		)
 	}
 
-	return data, rows.Err()
+	return deduplicate(data), rows.Err()
 }
 
-func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
+func deduplicate(data map[string]*Book) map[string]*Book {
+	var ret = make(map[string]*Book)
+
+	for id, book := range data {
+		b := &Book{
+			ID:     book.ID,
+			Title:  book.Title,
+			Author: book.Author,
+		}
+
+		bmtab := make(map[string]bool)
+		for _, bm := range book.Bookmarks {
+			if _, ok := bmtab[bm.Text]; !ok {
+				b.Bookmarks = append(b.Bookmarks, bm)
+				bmtab[bm.Text] = true
+			}
+		}
+
+		ret[id] = b
+	}
+
+	return ret
+}
+
+func normalise(ID string, book Book) TempData {
+	ret := TempData{
+		Title:     book.Title,
+		Bookmarks: book.Bookmarks,
+	}
+
+	if ret.Title == "" {
+		ret.Title = ID
+	}
+	if book.Author != "" {
+		ret.Title += " - " + book.Author
+	}
+	return ret
+}
+
+func uploadBookmarks(bay ts.Bay, data map[string]*Book) (e error) {
 	t, err := template.ParseFS(tFile, "template.html")
 	if err != nil {
 		return err
@@ -128,20 +206,21 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 
 	pchan := make(chan string, len(data))
 	done := make(chan bool, 1)
-	defer close(done)
 	go func() {
 		for path := range pchan {
-			rpath := filepath.Join(serverHome, "bookmarks", filepath.Base(path))
+			rpath := filepath.Join(bmpath, filepath.Base(path))
 			if err := bay.Upload(path, rpath); err != nil {
-				fmt.Println(err)
+				fmt.Println("uploadBookmarks", "bay.Upload", err)
 			}
 		}
 		done <- true
 	}()
 
 	var wg sync.WaitGroup
-	for title, bookmarks := range data {
-		bmpath := filepath.Join(notespath, title+".html")
+	for ID, book := range data {
+		ID = filepath.Base(ID)
+
+		bmpath := filepath.Join(notespath, ID+".html")
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -153,7 +232,7 @@ func uploadBookmarks(bay ts.Bay, data map[string][]Bookmark) (e error) {
 			}
 			defer f.Close()
 
-			if err := t.Execute(f, TempData{Title: title, Bookmarks: bookmarks}); err != nil {
+			if err := t.Execute(f, normalise(ID, *book)); err != nil {
 				e = errors.Join(e, err)
 			}
 			pchan <- bmpath
