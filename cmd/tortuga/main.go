@@ -156,10 +156,10 @@ func readBookmarks() (map[string]*Book, error) {
 		)
 	}
 
-	return deduplicate(data), rows.Err()
+	return merge(data), rows.Err()
 }
 
-func deduplicate(data map[string]*Book) map[string]*Book {
+func merge(data map[string]*Book) map[string]*Book {
 	var ret = make(map[string]*Book)
 
 	for id, book := range data {
@@ -171,7 +171,7 @@ func deduplicate(data map[string]*Book) map[string]*Book {
 
 		bmtab := make(map[string]bool)
 		for _, bm := range book.Bookmarks {
-			if _, ok := bmtab[bm.Text]; !ok {
+			if _, ok := bmtab[bm.Text]; !ok && bm.Text != "" {
 				b.Bookmarks = append(b.Bookmarks, bm)
 				bmtab[bm.Text] = true
 			}
