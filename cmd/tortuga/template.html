@@ -3,12 +3,12 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>{{ .Title }}</title>
+		<title>{{ .Title }} - {{ .Author }}</title>
 		<link rel="stylesheet" type="text/css" href="/css" />
 	</head>
 	<body>
 		<div class="container">
-			<h1>{{ .Title }}</h1>
+			<h1>{{ .Title }} - {{ .Author }}</h1>
 			{{ range $index, $bookmark := .Bookmarks }}
 			<div
 				class="bookmark-card"

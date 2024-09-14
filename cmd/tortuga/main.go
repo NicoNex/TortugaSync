@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"text/template"
 
@@ -30,15 +31,6 @@ type Book struct {
 	Bookmarks []Bookmark
 }
 
-func (b Bookmark) String() string {
-	return fmt.Sprintf("%s\n%s", b.Text, b.Note)
-}
-
-type TempData struct {
-	Title     string
-	Bookmarks []Bookmark
-}
-
 var (
 	isKraken bool
 
@@ -57,6 +49,8 @@ var (
 	koboHome   = filepath.Join("/", "mnt", "onboard")
 	notespath  = filepath.Join("/", "mnt", "onboard", ".kraken_notes")
 	dbpath     = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
+
+	sre = regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
 )
 
 func downloadAll(bay ts.Bay) (e error) {
@@ -96,154 +90,148 @@ func downloadAll(bay ts.Bay) (e error) {
 	return nil
 }
 
-func readBookmarks() (map[string]*Book, error) {
-	db, err := sql.Open("sqlite", dbpath)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
+func uploadBookmarks(bay ts.Bay, localPaths <-chan string) <-chan struct{} {
+	var done = make(chan struct{}, 1)
 
-	rows, err := db.Query(
+	go func() {
+		defer close(done)
+
+		for path := range localPaths {
+			rpath := filepath.Join(bmpath, filepath.Base(path))
+			if err := bay.Upload(path, rpath); err != nil {
+				fmt.Println("uploadBookmarks", "bay.Upload", err)
+			}
+		}
+		done <- struct{}{}
+	}()
+	return done
+}
+
+func generateBookmarks(data map[string]*Book) <-chan string {
+	var paths = make(chan string)
+
+	go func() {
+		defer close(paths)
+
+		t, err := template.ParseFS(tFile, "template.html")
+		if err != nil {
+			fmt.Println("generateBookmarks", "template.ParseFS", err)
+			return
+		}
+
+		var wg sync.WaitGroup
+		for id, book := range data {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				path := filepath.Join(
+					notespath,
+					notename(id, book.Title, book.Author),
+				)
+
+				f, err := os.Create(path)
+				if err != nil {
+					fmt.Println("generateBookmarks", "os.Create", err)
+					return
+				}
+				defer f.Close()
+
+				if err := t.Execute(f, book); err != nil {
+					fmt.Println("generateBookmarks", "t.Execute", err)
+					return
+				}
+				paths <- path
+			}()
+		}
+		wg.Wait()
+	}()
+
+	return paths
+}
+
+func notename(ID, title, author string) string {
+	if title == "" {
+		return sre.ReplaceAllString(filepath.Base(ID), "") + ".html"
+	}
+
+	var name = title
+	if author != "" {
+		name += " - " + author
+	}
+	if len(name) > 250 {
+		name = name[:250]
+	}
+	name = sre.ReplaceAllString(name, "")
+
+	return name + ".html"
+}
+
+func queryData(db *sql.DB) (map[string]*Book, error) {
+	var data = make(map[string]*Book)
+
+	rows, e := db.Query(
 		`SELECT
 		    Bookmark.VolumeID,
 		    Bookmark.Text,
 		    Bookmark.Annotation,
-		    content.BookTitle,
-			content.Attribution
+		    (
+		        SELECT BookTitle
+		        FROM content
+		        WHERE content.BookID = Bookmark.VolumeID
+		        LIMIT 1
+		    ) AS BookTitle,
+		    (
+		        SELECT Attribution
+		        FROM content
+		        WHERE content.ContentID = Bookmark.VolumeID
+		          AND content.Attribution IS NOT NULL
+		          AND content.Attribution != ''
+		        LIMIT 1
+		    ) AS Author
 		FROM
 		    Bookmark
-		JOIN
-		    content
-		ON
-		    Bookmark.VolumeID = content.BookID;`,
+		WHERE
+			Bookmark.Text IS NOT NULL AND Bookmark.Text != '';`,
 	)
-
-	if err != nil {
-		return nil, err
+	if e != nil {
+		return data, fmt.Errorf("queryData db.Query %w", e)
 	}
 	defer rows.Close()
 
-	// var data = make(map[string][]Bookmark)
-	var data = make(map[string]*Book)
 	for rows.Next() {
 		var (
-			ID     string
+			id     string
 			text   sql.NullString
 			note   sql.NullString
 			title  sql.NullString
 			author sql.NullString
 		)
 
-		if err := rows.Scan(&ID, &text, &note, &title, &author); err != nil {
-			fmt.Println(err)
+		if err := rows.Scan(&id, &text, &note, &title, &author); err != nil {
+			e = errors.Join(e, fmt.Errorf("queryData rows.Scan %w", err))
 			continue
 		}
 
-		if author.Valid {
-			fmt.Println(author.String)
-		}
-		book, ok := data[ID]
+		book, ok := data[id]
 		if !ok {
-			book = &Book{ID: ID, Title: title.String}
-			data[ID] = book
-		}
-		if author.Valid {
-			book.Author = author.String
+			book = &Book{ID: id, Title: title.String, Author: author.String}
+			data[id] = book
 		}
 		book.Bookmarks = append(
 			book.Bookmarks,
 			Bookmark{Text: text.String, Note: note.String},
 		)
 	}
-
-	return merge(data), rows.Err()
+	return data, errors.Join(e, rows.Err())
 }
 
-func merge(data map[string]*Book) map[string]*Book {
-	var ret = make(map[string]*Book)
-
-	for id, book := range data {
-		b := &Book{
-			ID:     book.ID,
-			Title:  book.Title,
-			Author: book.Author,
-		}
-
-		bmtab := make(map[string]bool)
-		for _, bm := range book.Bookmarks {
-			if _, ok := bmtab[bm.Text]; !ok && bm.Text != "" {
-				b.Bookmarks = append(b.Bookmarks, bm)
-				bmtab[bm.Text] = true
-			}
-		}
-
-		ret[id] = b
-	}
-
-	return ret
-}
-
-func normalise(ID string, book Book) TempData {
-	ret := TempData{
-		Title:     book.Title,
-		Bookmarks: book.Bookmarks,
-	}
-
-	if ret.Title == "" {
-		ret.Title = ID
-	}
-	if book.Author != "" {
-		ret.Title += " - " + book.Author
-	}
-	return ret
-}
-
-func uploadBookmarks(bay ts.Bay, data map[string]*Book) (e error) {
-	t, err := template.ParseFS(tFile, "template.html")
+func readBookmarks() (map[string]*Book, error) {
+	db, err := sql.Open("sqlite", dbpath)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	pchan := make(chan string, len(data))
-	done := make(chan bool, 1)
-	go func() {
-		for path := range pchan {
-			rpath := filepath.Join(bmpath, filepath.Base(path))
-			if err := bay.Upload(path, rpath); err != nil {
-				fmt.Println("uploadBookmarks", "bay.Upload", err)
-			}
-		}
-		done <- true
-	}()
-
-	var wg sync.WaitGroup
-	for ID, book := range data {
-		ID = filepath.Base(ID)
-
-		bmpath := filepath.Join(notespath, ID+".html")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			f, err := os.Create(bmpath)
-			if err != nil {
-				e = errors.Join(e, err)
-				return
-			}
-			defer f.Close()
-
-			if err := t.Execute(f, normalise(ID, *book)); err != nil {
-				e = errors.Join(e, err)
-			}
-			pchan <- bmpath
-		}()
-	}
-
-	wg.Wait()
-	close(pchan)
-	<-done
-	close(done)
-	return
+	defer db.Close()
+	return queryData(db)
 }
 
 func main() {
@@ -264,10 +252,7 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		if err := uploadBookmarks(bay, bms); err != nil {
-			fmt.Println(err)
-			return
-		}
+		<-uploadBookmarks(bay, generateBookmarks(bms))
 
 	default:
 		downloadAll(bay)
