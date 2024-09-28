@@ -84,6 +84,8 @@ var (
 		".", "\\.",
 		"!", "\\!",
 	).Replace
+
+	mdopt = &echotron.MessageOptions{ParseMode: echotron.MarkdownV2}
 )
 
 func newBot(chatID int64) echotron.Bot {
@@ -269,14 +271,26 @@ func (b bot) refreshMeta() {
 }
 
 func (b bot) sendMeta() {
-	var buf strings.Builder
+	var (
+		cnt int
+		buf strings.Builder
+	)
 
 	for h, p := range b.meta {
+		if cnt >= 10 {
+			_, err := b.SendMessage(buf.String(), b.chatID, mdopt)
+			if err != nil {
+				log.Println("b.sendMeta", "b.SendMessage", err)
+			}
+			buf.Reset()
+			cnt = 0
+		}
+
 		buf.WriteString(fmt.Sprintf("*%s*\n`%s`\n\n", escapeMD(filepath.Base(p)), h))
+		cnt++
 	}
-	_, err := b.SendMessage(buf.String(), b.chatID, &echotron.MessageOptions{
-		ParseMode: echotron.MarkdownV2,
-	})
+
+	_, err := b.SendMessage(buf.String(), b.chatID, mdopt)
 	if err != nil {
 		log.Println("b.sendMeta", "b.SendMessage", err)
 	}

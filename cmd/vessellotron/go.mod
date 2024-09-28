@@ -3,7 +3,7 @@ module vessellotron
 go 1.21.5
 
 require (
-	github.com/NicoNex/echotron/v3 v3.28.0
+	github.com/NicoNex/echotron/v3 v3.38.0
 	github.com/pgaskin/kepubify/v4 v4.0.4
 )
 
@@ -14,4 +14,5 @@ require (
 	github.com/pgaskin/kepubify/_/html v0.0.0-20211223234002-6ee2cc632cdc // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/time v0.5.0 // indirect
 )
