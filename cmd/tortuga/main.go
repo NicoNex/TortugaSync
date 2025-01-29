@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,20 +21,18 @@ import (
 )
 
 type Bookmark struct {
-	Text string
-	Note string
+	Text string `json:"text"`
+	Note string `json:"note,omitempty"`
 }
 
 type Book struct {
-	ID        string
-	Title     string
-	Author    string
-	Bookmarks []Bookmark
+	ID        string     `json:"-"`
+	Title     string     `json:"title"`
+	Author    string     `json:"author"`
+	Bookmarks []Bookmark `json:"bookmarks"`
 }
 
 var (
-	isKraken bool
-
 	//go:embed host_address
 	hostAddress string
 	//go:embed tortuga_key
@@ -149,6 +148,41 @@ func generateBookmarks(data map[string]*Book) <-chan string {
 	return paths
 }
 
+func generateBookmarksJSON(data map[string]*Book) <-chan string {
+	var paths = make(chan string)
+
+	go func() {
+		defer close(paths)
+
+		var wg sync.WaitGroup
+		for id, book := range data {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+
+				b, err := json.Marshal(book)
+				if err != nil {
+					fmt.Println("generateBookmarksJSON", "json.Marshal", err)
+					return
+				}
+
+				path := filepath.Join(
+					notespath,
+					jsonname(id, book.Title, book.Author),
+				)
+				if err := os.WriteFile(path, b, os.ModePerm); err != nil {
+					fmt.Println("generateBookmarksJSON", "os.WriteFile", err)
+					return
+				}
+				paths <- path
+			}()
+		}
+		wg.Wait()
+	}()
+
+	return paths
+}
+
 func notename(ID, title, author string) string {
 	if title == "" {
 		return sre.ReplaceAllString(filepath.Base(ID), "") + ".html"
@@ -164,6 +198,23 @@ func notename(ID, title, author string) string {
 	name = sre.ReplaceAllString(name, "")
 
 	return name + ".html"
+}
+
+func jsonname(ID, title, author string) string {
+	if title == "" {
+		return sre.ReplaceAllString(filepath.Base(ID), "") + ".json"
+	}
+
+	var name = title
+	if author != "" {
+		name += " - " + author
+	}
+	if len(name) > 250 {
+		name = name[:250]
+	}
+	name = sre.ReplaceAllString(name, "")
+
+	return name + ".json"
 }
 
 func queryData(db *sql.DB) (map[string]*Book, error) {
@@ -235,7 +286,13 @@ func readBookmarks() (map[string]*Book, error) {
 }
 
 func main() {
+	var (
+		isKraken     bool
+		isKrakenJson bool
+	)
+
 	flag.BoolVar(&isKraken, "b", false, "Upload bookmarks to the server")
+	flag.BoolVar(&isKrakenJson, "bm-json", false, "Upload bookmarks to the server in JSON format")
 	flag.Parse()
 
 	bay, err := ts.Connect(hostAddress, tortugaKey, hostKey)
@@ -246,6 +303,14 @@ func main() {
 	defer bay.Close()
 
 	switch {
+	case isKrakenJson:
+		bms, err := readBookmarks()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		<-uploadBookmarks(bay, generateBookmarksJSON(bms))
+
 	case isKraken:
 		bms, err := readBookmarks()
 		if err != nil {
