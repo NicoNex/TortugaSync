@@ -44,7 +44,6 @@ var (
 	tFile embed.FS
 
 	serverHome = filepath.Join("/", "home", "tortuga")
-	bmpath     = filepath.Join(serverHome, ".kraken")
 	koboHome   = filepath.Join("/", "mnt", "onboard")
 	notespath  = filepath.Join("/", "mnt", "onboard", ".kraken_notes")
 	dbpath     = filepath.Join("/", "mnt", "onboard", ".kobo", "KoboReader.sqlite")
@@ -90,7 +89,10 @@ func downloadAll(bay ts.Bay) (e error) {
 }
 
 func uploadBookmarks(bay ts.Bay, localPaths <-chan string) <-chan struct{} {
-	var done = make(chan struct{}, 1)
+	var (
+		bmpath = filepath.Join(serverHome, ".kraken")
+		done   = make(chan struct{}, 1)
+	)
 
 	go func() {
 		defer close(done)
@@ -106,7 +108,27 @@ func uploadBookmarks(bay ts.Bay, localPaths <-chan string) <-chan struct{} {
 	return done
 }
 
-func generateBookmarks(data map[string]*Book) <-chan string {
+func uploadJSONs(bay ts.Bay, localPaths <-chan string) <-chan struct{} {
+	var (
+		jbmpath = filepath.Join(serverHome, ".kraken-json")
+		done    = make(chan struct{}, 1)
+	)
+
+	go func() {
+		defer close(done)
+
+		for path := range localPaths {
+			rpath := filepath.Join(jbmpath, filepath.Base(path))
+			if err := bay.Upload(path, rpath); err != nil {
+				fmt.Println("uploadBookmarks", "bay.Upload", err)
+			}
+		}
+		done <- struct{}{}
+	}()
+	return done
+}
+
+func genBookmarks(data map[string]*Book) <-chan string {
 	var paths = make(chan string)
 
 	go func() {
@@ -114,7 +136,7 @@ func generateBookmarks(data map[string]*Book) <-chan string {
 
 		t, err := template.ParseFS(tFile, "template.html")
 		if err != nil {
-			fmt.Println("generateBookmarks", "template.ParseFS", err)
+			fmt.Println("genBookmarks", "template.ParseFS", err)
 			return
 		}
 
@@ -130,13 +152,13 @@ func generateBookmarks(data map[string]*Book) <-chan string {
 
 				f, err := os.Create(path)
 				if err != nil {
-					fmt.Println("generateBookmarks", "os.Create", err)
+					fmt.Println("genBookmarks", "os.Create", err)
 					return
 				}
 				defer f.Close()
 
 				if err := t.Execute(f, book); err != nil {
-					fmt.Println("generateBookmarks", "t.Execute", err)
+					fmt.Println("genBookmarks", "t.Execute", err)
 					return
 				}
 				paths <- path
@@ -148,7 +170,7 @@ func generateBookmarks(data map[string]*Book) <-chan string {
 	return paths
 }
 
-func generateBookmarksJSON(data map[string]*Book) <-chan string {
+func genJSONBookmarks(data map[string]*Book) <-chan string {
 	var paths = make(chan string)
 
 	go func() {
@@ -162,7 +184,7 @@ func generateBookmarksJSON(data map[string]*Book) <-chan string {
 
 				b, err := json.Marshal(book)
 				if err != nil {
-					fmt.Println("generateBookmarksJSON", "json.Marshal", err)
+					fmt.Println("genJSONBookmarks", "json.Marshal", err)
 					return
 				}
 
@@ -171,7 +193,7 @@ func generateBookmarksJSON(data map[string]*Book) <-chan string {
 					jsonname(id, book.Title, book.Author),
 				)
 				if err := os.WriteFile(path, b, os.ModePerm); err != nil {
-					fmt.Println("generateBookmarksJSON", "os.WriteFile", err)
+					fmt.Println("genJSONBookmarks", "os.WriteFile", err)
 					return
 				}
 				paths <- path
@@ -309,7 +331,7 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		<-uploadBookmarks(bay, generateBookmarksJSON(bms))
+		<-uploadJSONs(bay, genJSONBookmarks(bms))
 
 	case isKraken:
 		bms, err := readBookmarks()
@@ -317,7 +339,7 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-		<-uploadBookmarks(bay, generateBookmarks(bms))
+		<-uploadBookmarks(bay, genBookmarks(bms))
 
 	default:
 		downloadAll(bay)
