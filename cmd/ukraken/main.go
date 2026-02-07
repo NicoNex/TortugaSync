@@ -52,13 +52,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	handler := cors.New(cors.Options{
-		AllowedOrigins: []string{
-			"https://ukraken.dobl.one",
-		},
+		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "OPTIONS"},
 		AllowedHeaders: []string{"*"},
 	}).Handler(mux)
 
+	mux.HandleFunc("/", handleList)
 	mux.HandleFunc("/list", handleList)
 	mux.Handle("/json/", http.StripPrefix("/json/", http.FileServer(http.Dir(jpath))))
 	for {
